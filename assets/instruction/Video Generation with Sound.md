@@ -1,85 +1,110 @@
-# Video Generation with Sound
+# Video Generation with Sound (copy-friendly)
 
 ![Scheme 1](../images/Scheme-1.png)
 
-Ми робимо автоматизацію, в якій:
-1) генеруємо **фото** за промтом,  
-2) з фото генеруємо **відео**,  
-3) генеруємо **звук** до відео за промтом.
+## Що робимо
 
-Для цього використовуємо:
-- **OpenAI API**: https://platform.openai.com/  
-- **fal.ai**: https://fal.ai/
+1. Генеруємо **фото** за промтом
+2. З фото генеруємо **відео**
+3. Генеруємо **звук** за промтом
+4. **Склеюємо** відео + звук
 
-Перейди за посиланнями, створи **API key** і поповни баланс **мінімум на $5** на кожній платформі, щоб запити почали працювати.
+Сервіси:
 
-Далі:
-- якщо ти вперше на https://n8n.io/ — бери **trial на 14 днів** і працюй у Cloud;
-- якщо trial вже використаний — або **переїжджаєш на свій сервер (self-hosted)**, або купуєш підписку n8n: приблизно **€24/міс + податок** (виходить близько **€28.80/міс**).
+* OpenAI API: [https://platform.openai.com/](https://platform.openai.com/)
+* fal.ai: [https://fal.ai/](https://fal.ai/)
 
-Після цього заходимо в n8n і починаємо створювати **ноди** (вузли, які виконують конкретні дії).
-
-
-
+---
 
 ## Ноди (початок)
-1. **Manual Trigger** — запуск автоматизації по кліку  
-2. **AI / OpenAI / Message a model** — обробка промта та генерація текстових даних  
-   - **Model:** обираємо потрібну модель (після додавання Credentials з’явиться вибір).  
-   - **Credentials:** додаємо/обираємо **OpenAI API Key** (ключ зберігаємо в Credentials, не в самій ноді).  
-   - **Role:** **User**.  
-   - **Prompt:** використовуємо промт з файлу: [`Приклад промта (або використайте свій)`](../prompts/Video%20Generation%20with%20Sound.md).  
-  **Важливо:** промт має повертати дані у потрібній структурі, щоб воркфлоу працював коректно — обов’язково повинні бути поля: `image_prompt`, `video_prompt`, `negative_prompt`, `music_promt`.
-   - **Response format:** **JSON** → вставляємо схему нижче.
+
+### 1) Manual Trigger
+
+Запуск автоматизації по кліку.
+
+---
+
+### 2) AI / OpenAI / Message a model
+
+**Role:** User
+**Prompt:** з файлу: [Приклад промта або ваша версія](../prompts/Video%20Generation%20with%20Sound.md)
+**Важливо:** має повертати поля: `image_prompt`, `video_prompt`, `negative_prompt`, `music_promt`.
+
+**Response format → JSON schema:**
+
 ```json
 {
-	"type": "object",
-	"additionalProperties": false,
-	"properties": {
-		"frames": {
-			"type": "array",
-			"minItems": 1,
-			"items": {
-				"type": "object",
-				"additionalProperties": false,
-				"properties": {
-					"image_prompt": { "type": "string", "minLength": 1 },
-					"video_prompt": { "type": "string", "minLength": 1 },
-					"negative_prompt": { "type": "string", "minLength": 1 },
-					"music_promt": { "type": "string", "minLength": 1 }
-				},
-				"required": [
-					"image_prompt",
-					"video_prompt",
-					"negative_prompt",
-					"music_promt"
-				]
-			}
-		}
-	},
-	"required": ["frames"]
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "image_prompt": { "type": "string", "minLength": 1 },
+          "video_prompt": { "type": "string", "minLength": 1 },
+          "negative_prompt": { "type": "string", "minLength": 1 },
+          "music_promt": { "type": "string", "minLength": 1 }
+        },
+        "required": ["image_prompt", "video_prompt", "negative_prompt", "music_promt"]
+      }
+    }
+  },
+  "required": ["frames"]
 }
 ```
 
-3. **HTTP Request** — створення фото за промтом (fal.ai)
+---
+
+## 3) HTTP Request — генерація фото (fal.ai)
+
+**Method:**
+
 ```text
-POST https://fal.run/wan/v2.6/text-to-image
+POST
+```
+
+**URL:**
+
+```text
+https://fal.run/wan/v2.6/text-to-image
+```
+
+**Header Name:**
+
+```text
 Authorization
+```
+
+**Header Value:**
+
+```text
 Key API_KEY_FAL_AI
 ```
+
+**Body JSON:**
+
 ```json
 {
-	"prompt": "{{ $json.output[0].content[0].text.frames[0].image_prompt }}",
-	"negative_prompt": "{{ $json.output[0].content[0].text.frames[0].negative_prompt }}",
-	"image_size": "portrait_16_9",
-	"max_images": 1,
-	"enable_safety_checker": true
+  "prompt": "{{ $json.output[0].content[0].text.frames[0].image_prompt }}",
+  "negative_prompt": "{{ $json.output[0].content[0].text.frames[0].negative_prompt }}",
+  "image_size": "portrait_16_9",
+  "max_images": 1,
+  "enable_safety_checker": true
 }
 ```
 
-4. **Merge** — об’єднуємо дані в один масив  
-Input 1: **HTTP Request** (генерація фото) 
+---
+
+## 4) Merge — об’єднати дані
+
+Input 1: **HTTP Request (фото)**
 Input 2: **Message a model**
+
+**Merge settings:**
 
 ```text
 Mode: Combine
@@ -87,76 +112,162 @@ Combine By: Position
 Number of Inputs: 2
 ```
 
-5. **HTTP Request** — створення відео по фото за промтом (fal.ai)
+---
+
+## 5) HTTP Request — генерація відео по фото (fal.ai)
+
+**Method:**
+
 ```text
-POST https://queue.fal.run/fal-ai/kandinsky5-pro/image-to-video
+POST
+```
+
+**URL:**
+
+```text
+https://queue.fal.run/fal-ai/kandinsky5-pro/image-to-video
+```
+
+**Header Name:**
+
+```text
 Authorization
+```
+
+**Header Value:**
+
+```text
 Key API_KEY_FAL_AI
 ```
+
+**Body JSON:**
+
 ```json
 {
-	"prompt": "{{ $json.output[0].content[0].text.frames[0].video_prompt }}",
-	"image_url": "{{ $json.images[0].url }}",
-	"resolution": "512P",
-	"duration": "5s",
-	"num_inference_steps": 28,
-	"acceleration": "regular"
+  "prompt": "{{ $json.output[0].content[0].text.frames[0].video_prompt }}",
+  "image_url": "{{ $json.images[0].url }}",
+  "resolution": "512P",
+  "duration": "5s",
+  "num_inference_steps": 28,
+  "acceleration": "regular"
 }
 ```
+
+---
 
 ![Scheme-wait-1](../images/Scheme-wait-1.png)
 
-6. **Повторюваний блок (4 ноди): Wait → HTTP Request (status) → IF → HTTP Request (result)**  
-Цей блок буде використовуватись **3 рази** в проєкті (для різних дій: відео/звук/склейка).
+## 6) Повторюваний блок: Wait → status → IF → result
+
+Цей блок використаєш **3 рази**: для **відео**, **звуку**, **склейки**.
+
+**Логіка:**
 
 ```text
-Логіка:
 1) Wait — чекаємо потрібний час
 2) HTTP Request (GET) — перевіряємо статус задачі по status_url
-3) IF — якщо статус COMPLETED → йдемо далі, якщо ні → повертаємось на Wait
-4) HTTP Request (GET) — забираємо результат по response_url і передаємо в наступну ноду
-
-1. Рекомендовані затримки (приклад):
-- Генерація відео: 60s
-- Генерація звука: 10s
-- Склейка відео + звук: 15s
-
-2. HTTP Request — status
-Method: GET
-URL: {{ $json.status_url }}
-
-3. IF — перевірка статусу
-{{ $json.status }} == "COMPLETED"
-
-TRUE → до "HTTP Request — result"
-FALSE → назад до "Wait"
-
-4. HTTP Request — result
-Method: GET
-URL: {{ $json.response_url }}
+3) IF — якщо статус COMPLETED → далі, якщо ні → назад на Wait
+4) HTTP Request (GET) — забираємо результат по response_url
 ```
 
-7. **HTTP Request** — створення аудіо за промтом (fal.ai)  
-Підключаємо після **Message a model**.
+**Рекомендовані затримки:**
 
 ```text
-POST https://queue.fal.run/cassetteai/sound-effects-generator
+Генерація відео: 60s
+Генерація звука: 10s
+Склейка відео + звук: 15s
+```
+
+### 6.2) HTTP Request — status
+
+**Method:**
+
+```text
+GET
+```
+
+**URL:**
+
+```text
+{{ $json.status_url }}
+```
+
+### 6.3) IF — перевірка статусу
+
+**Умова:**
+
+```text
+{{ $json.status }} == "COMPLETED"
+```
+
+TRUE → до “HTTP Request — result”
+FALSE → назад до “Wait”
+
+### 6.4) HTTP Request — result
+
+**Method:**
+
+```text
+GET
+```
+
+**URL:**
+
+```text
+{{ $json.response_url }}
+```
+
+---
+
+## 7) HTTP Request — генерація аудіо (fal.ai)
+
+Підключаємо **після Message a model**.
+
+**Method:**
+
+```text
+POST
+```
+
+**URL:**
+
+```text
+https://queue.fal.run/cassetteai/sound-effects-generator
+```
+
+**Header Name:**
+
+```text
 Authorization
+```
+
+**Header Value:**
+
+```text
 Key API_KEY_FAL_AI
 ```
-Якщо такий варіант кине помилку змінити його на Using Field Below і явно вказати значення
+
+Якщо варіант з Body кине помилку — перемкни на **Using Field Below** і встав явно:
+
+**Body JSON:**
+
 ```json
 {
-	"prompt": "{{ $json.output[0].content[0].text.frames[0].music_promt }}",
-	"duration": 5
+  "prompt": "{{ $json.output[0].content[0].text.frames[0].music_promt }}",
+  "duration": 5
 }
 ```
 
-8. Повторити крок **6**
+---
 
-9. **Merge** — об’єднуємо дані в один масив із крока **8** та **6**
-Input 1: **8**
-Input 2: **6**
+## 8) Повторити крок 6 (для аудіо)
+
+## 9) Merge — звести разом результат відео + аудіо
+
+Input 1: **8 (аудіо result)**
+Input 2: **6 (відео result)**
+
+**Merge settings:**
 
 ```text
 Mode: Combine
@@ -164,19 +275,48 @@ Combine By: Position
 Number of Inputs: 2
 ```
 
-10. **HTTP Request** — об’єднуємо авдіо та відео в один файл(fal.ai)
+---
+
+## 10) HTTP Request — склейка відео + аудіо (fal.ai)
+
+**Method:**
+
 ```text
-POST https://queue.fal.run/fal-ai/ffmpeg-api/merge-audio-video
+POST
+```
+
+**URL:**
+
+```text
+https://queue.fal.run/fal-ai/ffmpeg-api/merge-audio-video
+```
+
+**Header Name:**
+
+```text
 Authorization
+```
+
+**Header Value:**
+
+```text
 Key API_KEY_FAL_AI
 ```
-Якщо такий варіант кине помилку змінити його на Using Field Below і явно вказати значення
+
+Якщо кине помилку — **Using Field Below** і встав:
+
+**Body JSON:**
+
 ```json
 {
-	"video_url": "{{ $json.video.url }}",
-	"audio_url": "{{ $json.audio_file.url }}",
-	"start_offset": 0
+  "video_url": "{{ $json.video.url }}",
+  "audio_url": "{{ $json.audio_file.url }}",
+  "start_offset": 0
 }
 ```
 
-11. Повторюємо крок **6** запускаєм нашу автоматизацію і при завершенні вибираєм активний алемент він нам і покаже наше відео 
+---
+
+## 11) Повторити крок 6 (для merge)
+
+Після COMPLETED — у result/response отримаєш фінальний файл (URL) і зможеш відкрити відео.
